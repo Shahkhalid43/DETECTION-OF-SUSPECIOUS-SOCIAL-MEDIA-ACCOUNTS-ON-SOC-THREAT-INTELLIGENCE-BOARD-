@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Threat Intelligence Board</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0a0e1a;
+            color: #e0e0e0;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            background: linear-gradient(135deg, #1a1f35, #0d1b2a);
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #00d4ff;
+            box-shadow: 0 2px 20px rgba(0,212,255,0.2);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .header h1 { color: #00d4ff; font-size: 20px; letter-spacing: 2px; }
+        .header span { color: #888; font-size: 12px; }
+        .live-badge {
+            background: #ff4444;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            animation: blink 1.5s infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+        /* ── STATS ROW ── */
+        .stats-row {
+            display: flex;
+            gap: 12px;
+            padding: 20px 30px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            flex: 1;
+            min-width: 120px;
+            background: linear-gradient(135deg, #1a1f35, #151b30);
+            border: 1px solid #2a3050;
+            border-radius: 10px;
+            padding: 14px;
+            text-align: center;
+            transition: transform 0.2s, border-color 0.2s;
+            cursor: default;
+        }
+        .stat-card:hover { transform: translateY(-3px); border-color: #00d4ff; }
+        .stat-card .number { font-size: 26px; font-weight: bold; color: #00d4ff; }
+        .stat-card .label  { font-size: 11px; color: #888; margin-top: 5px; }
+        .stat-card.red    .number { color: #ff4444; }
+        .stat-card.green  .number { color: #00ff88; }
+        .stat-card.yellow .number { color: #ffaa00; }
+
+        /* ── TABS ── */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            padding: 0 30px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .tab {
+            padding: 8px 18px;
+            border-radius: 20px;
+            border: 1px solid #2a3050;
+            background: #1a1f35;
+            color: #888;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .tab:hover, .tab.active {
+            background: #00d4ff;
+            color: #000;
+            border-color: #00d4ff;
+            font-weight: bold;
+        }
+
+        /* ── MAIN LAYOUT ── */
+        .main {
+            display: flex;
+            gap: 20px;
+            padding: 0 30px 30px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+
+        /* ── FORM PANEL ── */
+        .form-panel {
+            background: #1a1f35;
+            border: 1px solid #2a3050;
+            border-radius: 10px;
+            padding: 20px;
+            width: 300px;
+            min-width: 260px;
+        }
+        .form-panel h3 { color: #00d4ff; margin-bottom: 15px; font-size: 15px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { font-size: 12px; color: #888; display: block; margin-bottom: 5px; }
+
+        /* FIX: inputs must NOT use type=number with negative values — min=0 enforced */
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #0d1020;
+            border: 1px solid #2a3050;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 13px;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        /* FIX: show validation errors inline */
+        .form-group .field-error {
+            color: #ff6666;
+            font-size: 11px;
+            margin-top: 3px;
+            display: none;
+        }
+        .form-group.has-error input,
+        .form-group.has-error select {
+            border-color: #ff4444;
+        }
+        .form-group.has-error .field-error { display: block; }
+
+        .btn-analyze {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #00d4ff, #0088aa);
+            border: none;
+            border-radius: 6px;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 5px;
+            transition: opacity 0.2s;
+        }
+        .btn-analyze:hover:not(:disabled) { opacity: 0.85; }
+        .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── RESULT BOX ── */
+        .result-box {
+            margin-top: 15px;
+            padding: 14px;
+            border-radius: 8px;
+            display: none;
+            font-size: 13px;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+        .result-box.suspicious { background: rgba(255,68,68,0.15); border: 1px solid #ff4444; }
+        .result-box.legitimate { background: rgba(0,255,136,0.15); border: 1px solid #00ff88; }
+        .result-box.error-box  { background: rgba(255,200,0,0.1);  border: 1px solid #ffaa00; }
+        .result-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        .result-row span:last-child { font-weight: bold; }
+
+        /* ── TABLE PANEL ── */
+        .table-panel {
+            flex: 1;
+            min-width: 300px;
+            background: #1a1f35;
+            border: 1px solid #2a3050;
+            border-radius: 10px;
+            padding: 20px;
+            overflow-x: auto;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .table-panel h3 { color: #00d4ff; font-size: 15px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        th {
+            background: #0d1020;
+            color: #00d4ff;
+            padding: 10px 8px;
+            text-align: left;
+            border-bottom: 1px solid #2a3050;
+            white-space: nowrap;
+        }
+        td {
+            padding: 9px 8px;
+            border-bottom: 1px solid #1a2030;
+            white-space: nowrap;
+        }
+        tr:hover td { background: rgba(0,212,255,0.05); }
+
+        /* ── BADGES ── */
+        .badge {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .badge.suspicious { background: rgba(255,68,68,0.2);  color: #ff4444; border: 1px solid #ff4444; }
+        .badge.legitimate { background: rgba(0,255,136,0.2);  color: #00ff88; border: 1px solid #00ff88; }
+        .badge.critical   { background: rgba(255,0,0,0.2);    color: #ff4444; border: 1px solid #ff0000; }
+        .badge.high       { background: rgba(255,100,0,0.2);  color: #ff6400; border: 1px solid #ff6400; }
+        .badge.medium     { background: rgba(255,200,0,0.2);  color: #ffc800; border: 1px solid #ffc800; }
+        .badge.low        { background: rgba(0,200,100,0.2);  color: #00c864; border: 1px solid #00c864; }
+
+        /* ── BUTTONS ── */
+        .btn-clear {
+            padding: 6px 14px;
+            background: rgba(255,68,68,0.15);
+            border: 1px solid #ff4444;
+            border-radius: 6px;
+            color: #ff4444;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+        .btn-clear:hover { background: rgba(255,68,68,0.35); }
+
+        /* ── LOADING SPINNER ── */
+        .spinner {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid #0d1020;
+            border-top-color: #000;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-msg { text-align: center; color: #555; padding: 30px; }
+
+        /* ── MODEL WARNING BANNER ── */
+        #model-warning {
+            display: none;
+            margin: 0 30px 15px;
+            padding: 10px 16px;
+            background: rgba(255,170,0,0.12);
+            border: 1px solid #ffaa00;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #ffaa00;
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <div>
+        <h1>🛡️ SOC THREAT INTELLIGENCE BOARD</h1>
+        <span>Suspicious Social Media Account Detection System</span>
+    </div>
+    <div class="live-badge">● LIVE</div>
+</div>
+
+<!-- STATS ROW -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="number" id="stat-total">0</div>
+        <div class="label">Total Analyzed</div>
+    </div>
+    <div class="stat-card red">
+        <div class="number" id="stat-suspicious">0</div>
+        <div class="label">Suspicious</div>
+    </div>
+    <div class="stat-card green">
+        <div class="number" id="stat-legitimate">0</div>
+        <div class="label">Legitimate</div>
+    </div>
+    <div class="stat-card yellow">
+        <div class="number" id="stat-twitter">0</div>
+        <div class="label">🐦 Twitter</div>
+    </div>
+    <div class="stat-card yellow">
+        <div class="number" id="stat-instagram">0</div>
+        <div class="label">📸 Instagram</div>
+    </div>
+    <div class="stat-card yellow">
+        <div class="number" id="stat-facebook">0</div>
+        <div class="label">📘 Facebook</div>
+    </div>
+    <div class="stat-card yellow">
+        <div class="number" id="stat-linkedin">0</div>
+        <div class="label">💼 LinkedIn</div>
+    </div>
+</div>
+
+<!-- FIX: Model warning banner — shows if Instagram model is missing -->
+<div id="model-warning">
+    ⚠️ Some platform models are not loaded. Missing platforms will use the combined model as fallback.
+    Loaded models: <strong id="loaded-models-list">checking...</strong>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+    <div class="tab active" onclick="filterPlatform('all', this)">🌐 All Platforms</div>
+    <div class="tab" onclick="filterPlatform('twitter', this)">🐦 Twitter</div>
+    <div class="tab" onclick="filterPlatform('instagram', this)">📸 Instagram</div>
+    <div class="tab" onclick="filterPlatform('facebook', this)">📘 Facebook</div>
+    <div class="tab" onclick="filterPlatform('linkedin', this)">💼 LinkedIn</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+    <!-- FORM PANEL -->
+    <div class="form-panel">
+        <h3>🔍 Analyze Account</h3>
+
+        <div class="form-group">
+            <label>Platform</label>
+            <select id="platform">
+                <option value="twitter">🐦 Twitter</option>
+                <option value="instagram">📸 Instagram</option>
+                <option value="facebook">📘 Facebook</option>
+                <option value="linkedin">💼 LinkedIn</option>
+            </select>
+        </div>
+
+        <div class="form-group" id="fg-username">
+            <label>Username</label>
+            <input type="text" id="username" placeholder="e.g. john_doe" maxlength="100">
+            <div class="field-error">Username cannot be empty.</div>
+        </div>
+
+        <div class="form-group" id="fg-followers">
+            <label>Followers Count</label>
+            <input type="number" id="followers" placeholder="e.g. 1500" min="0" value="0">
+            <div class="field-error">Must be a number ≥ 0.</div>
+        </div>
+
+        <div class="form-group" id="fg-mentions">
+            <label>Following / Connections Count</label>
+            <input type="number" id="mentions" placeholder="e.g. 300" min="0" value="0">
+            <div class="field-error">Must be a number ≥ 0.</div>
+        </div>
+
+        <div class="form-group" id="fg-retweets">
+            <label>Posts / Retweets Count</label>
+            <input type="number" id="retweets" placeholder="e.g. 200" min="0" value="0">
+            <div class="field-error">Must be a number ≥ 0.</div>
+        </div>
+
+        <div class="form-group" id="fg-bio">
+            <label>Bio Length (characters)</label>
+            <input type="number" id="bio" placeholder="e.g. 150" min="0" value="0">
+            <div class="field-error">Must be a number ≥ 0.</div>
+        </div>
+
+        <div class="form-group">
+            <label>Verified Account?</label>
+            <select id="verified">
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Has Location?</label>
+            <select id="location">
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+            </select>
+        </div>
+
+        <button class="btn-analyze" id="analyze-btn" onclick="analyzeAccount()">
+            🔍 ANALYZE ACCOUNT
+        </button>
+
+        <!-- Result Box -->
+        <div class="result-box" id="result-box">
+            <div class="result-title" id="result-title"></div>
+            <div class="result-row"><span>Platform</span>   <span id="r-platform"></span></div>
+            <div class="result-row"><span>Username</span>   <span id="r-username"></span></div>
+            <div class="result-row"><span>Confidence</span> <span id="r-confidence"></span></div>
+            <div class="result-row"><span>Threat Level</span><span id="r-threat"></span></div>
+        </div>
+    </div>
+
+    <!-- TABLE PANEL -->
+    <div class="table-panel">
+        <div class="table-header">
+            <h3>📋 Analyzed Accounts Log</h3>
+            <button class="btn-clear" onclick="clearAll()">🗑️ Clear All</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Platform</th>
+                    <th>Username</th>
+                    <th>Followers</th>
+                    <th>Verified</th>
+                    <th>Status</th>
+                    <th>Confidence</th>
+                    <th>Threat</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody id="accounts-table">
+                <tr>
+                    <td colspan="9" class="empty-msg">No accounts analyzed yet. Use the form to analyze!</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const platformIcons = { twitter:'🐦', instagram:'📸', facebook:'📘', linkedin:'💼' };
+    let currentPlatform = 'all';
+
+    // ─────────────────────────────────────────
+    // FIX 1: Input validation before sending
+    // ─────────────────────────────────────────
+    function clearErrors() {
+        document.querySelectorAll('.form-group').forEach(g => g.classList.remove('has-error'));
+    }
+
+    function setError(fieldGroupId, show) {
+        const el = document.getElementById(fieldGroupId);
+        if (el) el.classList.toggle('has-error', show);
+    }
+
+    function validateForm() {
+        clearErrors();
+        let valid = true;
+
+        const username  = document.getElementById('username').value.trim();
+        const followers = document.getElementById('followers').value;
+        const mentions  = document.getElementById('mentions').value;
+        const retweets  = document.getElementById('retweets').value;
+        const bio       = document.getElementById('bio').value;
+
+        if (!username) {
+            setError('fg-username', true);
+            valid = false;
+        }
+        if (followers === '' || isNaN(followers) || Number(followers) < 0) {
+            setError('fg-followers', true);
+            valid = false;
+        }
+        if (mentions === '' || isNaN(mentions) || Number(mentions) < 0) {
+            setError('fg-mentions', true);
+            valid = false;
+        }
+        if (retweets === '' || isNaN(retweets) || Number(retweets) < 0) {
+            setError('fg-retweets', true);
+            valid = false;
+        }
+        if (bio === '' || isNaN(bio) || Number(bio) < 0) {
+            setError('fg-bio', true);
+            valid = false;
+        }
+        return valid;
+    }
+
+    // ─────────────────────────────────────────
+    // FIX 2: Analyze with proper error handling
+    // ─────────────────────────────────────────
+    async function analyzeAccount() {
+        if (!validateForm()) return;
+
+        const username  = document.getElementById('username').value.trim();
+        const platform  = document.getElementById('platform').value;
+        const followers = Number(document.getElementById('followers').value) || 0;
+        const mentions  = Number(document.getElementById('mentions').value)  || 0;
+        const retweets  = Number(document.getElementById('retweets').value)  || 0;
+        const bio       = Number(document.getElementById('bio').value)       || 0;
+        const verified  = document.getElementById('verified').value;
+        const location  = document.getElementById('location').value;
+
+        const btn = document.getElementById('analyze-btn');
+        btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+        btn.disabled  = true;
+
+        const box = document.getElementById('result-box');
+        box.style.display = 'none';
+
+        try {
+            const response = await fetch('/api/predict', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    platform,
+                    username,
+                    followers_count: followers,
+                    mention_count:   mentions,
+                    retweet_count:   retweets,
+                    bio_length:      bio,
+                    verified:        Number(verified),
+                    has_location:    Number(location)
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // FIX: Show server error message cleanly — not alert()
+                showError(data.error || 'Server error. Please try again.');
+            } else {
+                showResult(data);
+                loadAccounts();
+                loadStats();
+            }
+        } catch (e) {
+            // FIX: Network error — show inside result box, not alert()
+            showError('Cannot connect to server. Make sure app.py is running.');
+        }
+
+        btn.innerHTML = '🔍 ANALYZE ACCOUNT';
+        btn.disabled  = false;
+    }
+
+    // ─────────────────────────────────────────
+    // FIX 3: Show results cleanly
+    // ─────────────────────────────────────────
+    function showResult(data) {
+        const box = document.getElementById('result-box');
+        box.style.display = 'block';
+        box.className     = 'result-box ' + (data.prediction === 'Suspicious' ? 'suspicious' : 'legitimate');
+
+        document.getElementById('result-title').textContent =
+            (data.prediction === 'Suspicious' ? '🚨 ' : '✅ ') + data.prediction + ' Account!';
+
+        document.getElementById('r-platform').textContent   =
+            (platformIcons[data.platform] || '') + ' ' + data.platform;
+        document.getElementById('r-username').textContent   = data.username || '—';
+        document.getElementById('r-confidence').textContent = data.confidence + '%';
+        document.getElementById('r-threat').textContent     = data.threat_level;
+    }
+
+    function showError(message) {
+        const box = document.getElementById('result-box');
+        box.style.display = 'block';
+        box.className     = 'result-box error-box';
+        document.getElementById('result-title').textContent = '⚠️ Error';
+        document.getElementById('r-platform').textContent   = '';
+        document.getElementById('r-username').textContent   = '';
+        document.getElementById('r-confidence').textContent = message;
+        document.getElementById('r-threat').textContent     = '';
+    }
+
+    // ─────────────────────────────────────────
+    // FIX 4: Load accounts with error handling
+    // ─────────────────────────────────────────
+    async function loadAccounts() {
+        try {
+            const url  = currentPlatform === 'all'
+                ? '/api/accounts'
+                : `/api/accounts?platform=${currentPlatform}`;
+            const res  = await fetch(url);
+            if (!res.ok) throw new Error('Failed to load');
+            const data = await res.json();
+
+            const tbody = document.getElementById('accounts-table');
+            if (!data.length) {
+                tbody.innerHTML =
+                    '<tr><td colspan="9" class="empty-msg">No accounts analyzed yet. Use the form to analyze!</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map((a, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${platformIcons[a.platform] || ''} ${a.platform}</td>
+                    <td><strong>${escapeHtml(a.username)}</strong></td>
+                    <td>${Number(a.followers_count).toLocaleString()}</td>
+                    <td>${a.verified ? '✅' : '❌'}</td>
+                    <td><span class="badge ${a.prediction.toLowerCase()}">${a.prediction}</span></td>
+                    <td>${a.confidence}%</td>
+                    <td><span class="badge ${a.threat_level.toLowerCase()}">${a.threat_level}</span></td>
+                    <td>${a.created_at}</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error('loadAccounts error:', e);
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // FIX 5: Load stats + show model warning
+    // ─────────────────────────────────────────
+    async function loadStats() {
+        try {
+            const res  = await fetch('/api/stats');
+            if (!res.ok) throw new Error('Failed to load stats');
+            const data = await res.json();
+
+            document.getElementById('stat-total').textContent      = data.all?.total      || 0;
+            document.getElementById('stat-suspicious').textContent = data.all?.suspicious || 0;
+            document.getElementById('stat-legitimate').textContent = data.all?.legitimate || 0;
+            document.getElementById('stat-twitter').textContent    = data.twitter?.total  || 0;
+            document.getElementById('stat-instagram').textContent  = data.instagram?.total || 0;
+            document.getElementById('stat-facebook').textContent   = data.facebook?.total || 0;
+            document.getElementById('stat-linkedin').textContent   = data.linkedin?.total || 0;
+
+            // FIX: Show warning if not all 4 platform models are loaded
+            const loaded   = data.loaded_models || [];
+            const expected = ['twitter', 'instagram', 'facebook', 'linkedin'];
+            const missing  = expected.filter(p => !loaded.includes(p));
+
+            const warningEl = document.getElementById('model-warning');
+            if (missing.length > 0) {
+                warningEl.style.display = 'block';
+                document.getElementById('loaded-models-list').textContent =
+                    loaded.length ? loaded.join(', ') : 'none (using combined model)';
+            } else {
+                warningEl.style.display = 'none';
+            }
+        } catch (e) {
+            console.error('loadStats error:', e);
+        }
+    }
+
+    function filterPlatform(platform, el) {
+        currentPlatform = platform;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        loadAccounts();
+    }
+
+    async function clearAll() {
+        if (!confirm('Are you sure you want to clear ALL records? This cannot be undone.')) return;
+        try {
+            const res = await fetch('/api/clear', { method: 'DELETE' });
+            if (res.ok) {
+                loadAccounts();
+                loadStats();
+            }
+        } catch (e) {
+            console.error('clearAll error:', e);
+        }
+    }
+
+    // FIX 6: Prevent XSS — escape user input before putting in table
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ─── Init ───
+    loadAccounts();
+    loadStats();
+
+    // FIX: Auto-refresh every 15s (was 10s — reduced server load)
+    setInterval(() => {
+        loadAccounts();
+        loadStats();
+    }, 15000);
+</script>
+</body>
+</html>
